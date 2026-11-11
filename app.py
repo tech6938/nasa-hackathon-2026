@@ -23,6 +23,7 @@ from src.charts import (
     comms_window_chart,
     timeline_status_chart,
     site_map_chart,
+    horizon_sky_chart,
 )
 
 css_path = Path(__file__).parent / "assets" / "style.css"
@@ -58,8 +59,7 @@ except Exception as e:
 with st.sidebar:
     st.header("🛠️ Mission Parameters")
     
-    # --- NEW: CALENDAR DATE PICKER ---
-    # Find the min and max dates from our JSON data
+    # --- CALENDAR DATE PICKER ---
     min_date = df["timestamp"].min().date()
     max_date = df["timestamp"].max().date()
     
@@ -204,16 +204,27 @@ st.plotly_chart(
 )
 
 
+# --- DETAILED TELEMETRY (3 COLUMNS) ---
 st.markdown("### 📊 Detailed telemetry")
-chart_col1, chart_col2 = st.columns(2, gap="large")
+chart_col1, chart_col2, chart_col3 = st.columns(3, gap="medium")
+
 with chart_col1:
+    st.markdown("**🌅 Sun relative to horizon**")
+    st.plotly_chart(
+        horizon_sky_chart(row),
+        use_container_width=True,
+        config={"displayModeBar": False},
+    )
+
+with chart_col2:
     st.markdown("**☀️ Solar elevation vs. time**")
     st.plotly_chart(
         sun_elevation_chart(series, idx),
         use_container_width=True,
         config={"displayModeBar": False},
     )
-with chart_col2:
+
+with chart_col3:
     st.markdown("**📡 Earth visibility window**")
     st.plotly_chart(
         comms_window_chart(series, idx),

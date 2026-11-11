@@ -5,6 +5,13 @@ import pandas as pd
 
 def sun_elevation_chart(series: pd.DataFrame, current_idx: int) -> go.Figure:
     fig = go.Figure()
+    fig.add_shape(
+        type="circle",
+        xref="paper", yref="paper",
+        x0=0.1, y0=0.1, x1=0.9, y1=0.9,
+        line=dict(color="#EF4444", width=3, dash="dash"),
+        fillcolor="rgba(0,0,0,0)",
+    )
     fig.add_hrect(y0=3.0, y1=10, fillcolor="rgba(34,197,94,0.10)", line_width=0,
                   annotation_text="Strong solar", annotation_position="top left")
     fig.add_hrect(y0=0.0, y1=3.0, fillcolor="rgba(245,158,11,0.10)", line_width=0,
@@ -39,7 +46,7 @@ def comms_window_chart(series: pd.DataFrame, current_idx: int) -> go.Figure:
     labels = ["Visible" if v else "Blocked" for v in series["earth_visible"]]
     fig = go.Figure(go.Bar(
         x=series["timestamp"], y=[1] * len(series),
-        marker_color=colors, text=labels, textposition="inside",
+        marker_color=colors, text=labels, textposition="none",
         textfont=dict(color="white", size=10),
         hovertemplate="%{x|%H:%M} UTC<br>%{text}<extra></extra>",
     ))
@@ -110,5 +117,72 @@ def site_map_chart(sites_meta: list[dict], selected_id: str) -> go.Figure:
         yaxis=dict(title="Latitude (deg)", range=[-90, -80], zeroline=False),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         showlegend=False,
+    )
+    return fig
+
+
+def horizon_sky_chart(row: pd.Series) -> go.Figure:
+    """A literal sky-dome visualization of the Sun relative to the horizon."""
+    sun_deg = float(row["sun_elevation_deg"])
+    
+    # Plotly polar charts start at 90 (East) and go counter-clockwise.
+    # We map sun_deg to r (radius) and use a fixed theta.
+    # To visualize horizon, we plot a full circle at r=0.
+    
+    fig = go.Figure()
+
+    # 1. The Sky Dome Background (Green above horizon, Red below)
+    fig.add_trace(go.Scatterpolar(
+        r=[10, 10, -5, -5, 10],
+        theta=[0, 360, 360, 0, 0],
+        fill='toself',
+        fillcolor='rgba(34, 197, 94, 0.1)' if sun_deg > 0 else 'rgba(239, 68, 68, 0.1)',
+        line=dict(color='rgba(255,255,255,0.1)'),
+        hoverinfo='skip',
+        showlegend=False
+    ))
+
+    # 2. The Horizon Line (0 degrees)
+    fig.add_trace(go.Scatterpolar(
+        r=[0, 0],
+        theta=[0, 360],
+        mode='lines',
+        line=dict(color='#EF4444', width=3, dash='dash'),
+        name='Horizon (0°)',
+        hoverinfo='skip'
+    ))
+
+    # 3. The Sun
+    fig.add_trace(go.Scatterpolar(
+        r=[max(sun_deg, -4.5)],  # Clamp so it doesn't fly off the chart
+        theta=[180], # Put it at the bottom (South)
+        mode='markers+text',
+        marker=dict(size=18, color='#FBBF24', line=dict(color='white', width=2)),
+        text=["☀️ Sun"],
+        textposition="bottom center",
+        name='Sun Position',
+        hovertemplate=f"Sun Elevation: {sun_deg:+.1f}°<extra></extra>"
+    ))
+
+    fig.update_layout(
+        height=340,
+        margin=dict(l=40, r=40, t=40, b=40),
+        polar=dict(
+            radialaxis=dict(
+                visible=True, 
+                range=[-6, 6], 
+                showticklabels=False, 
+                ticks=''
+            ),
+            angularaxis=dict(
+                visible=False, 
+                rotation=90, 
+                direction="clockwise"
+            ),
+            bgcolor="rgba(0,0,0,0)"
+        ),
+        showlegend=False,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
     )
     return fig

@@ -7,6 +7,7 @@ Run with:  streamlit run app.py
 from pathlib import Path
 import streamlit as st
 import pandas as pd
+import datetime
 
 st.set_page_config(
     page_title="Lunar Landing Site Navigator",
@@ -56,11 +57,31 @@ except Exception as e:
 
 with st.sidebar:
     st.header("🛠️ Mission Parameters")
+    
+    # --- NEW: CALENDAR DATE PICKER ---
+    # Find the min and max dates from our JSON data
+    min_date = df["timestamp"].min().date()
+    max_date = df["timestamp"].max().date()
+    
+    selected_date = st.date_input(
+        "Mission Date",
+        value=min_date,
+        min_value=min_date,
+        max_value=max_date,
+    )
+    
     site_names = [s["name"] for s in sites_meta]
     selected_name = st.selectbox("Landing site", site_names, index=0)
     selected_site = next(s for s in sites_meta if s["name"] == selected_name)
 
-    series = get_site_series(df, selected_site["id"])
+    # Filter dataframe by selected date
+    full_series = get_site_series(df, selected_site["id"])
+    series = full_series[full_series["timestamp"].dt.date == selected_date].reset_index(drop=True)
+    
+    if series.empty:
+        st.error("No data for this date.")
+        st.stop()
+
     hours = series["timestamp"].dt.strftime("%H:%M").tolist()
 
     idx = st.select_slider(
@@ -73,7 +94,7 @@ with st.sidebar:
     st.divider()
     compare_mode = st.checkbox("🔍 Compare all sites (at this hour)")
     st.caption(
-        "Dataset: pre-calculated illumination & DTE visibility "
+        "Dataset: 30 days of pre-calculated illumination & DTE visibility "
         "(modeled after LOLA/Mazarico et al.). 24h @ 1h resolution."
     )
 
@@ -89,46 +110,40 @@ with st.sidebar:
 
 # --- COMPARE MODE SECTION ---
 if compare_mode:
-    st.markdown("### ⚖️ Site Comparison (Current Hour)")
-    st.markdown(f"Comparing all candidate sites at **{hours[idx]} UTC**.")
+    st.markdown(f"### ⚖️ Site Comparison ({selected_date} at {hours[idx]} UTC)")
     
-    # Grab data for ALL sites at the current time
     compare_rows = []
     for site in sites_meta:
         site_series = get_site_series(df, site["id"])
-        row = site_series.iloc[idx]
-        verdict = evaluate_point(row)
+        site_day_series = site_series[site_series["timestamp"].dt.date == selected_date].reset_index(drop=True)
         
-        compare_rows.append({
-            "Site": site["name"],
-            "Sun Elev (deg)": f"{row['sun_elevation_deg']:+.1f}°",
-            "Earth Visible": "✅ Yes" if row["earth_visible"] else "❌ No",
-            "Power OK": "✅ Yes" if row["power_ok"] else "❌ No",
-            "Status": verdict.status,
-            "Readiness": f"{verdict.score}/100"
-        })
+        if not site_day_series.empty:
+            row = site_day_series.iloc[idx]
+            verdict = evaluate_point(row)
+            
+            compare_rows.append({
+                "Site": site["name"],
+                "Sun Elev (deg)": f"{row['sun_elevation_deg']:+.1f}°",
+                "Earth Visible": "✅ Yes" if row["earth_visible"] else "❌ No",
+                "Power OK": "✅ Yes" if row["power_ok"] else "❌ No",
+                "Status": verdict.status,
+                "Readiness": f"{verdict.score}/100"
+            })
     
     compare_df = pd.DataFrame(compare_rows)
     
-    # Use Streamlit's built-in styling to color the Status column
     def color_status(val):
         if val == "GO": return 'background-color: #22C55E; color: white;'
         elif val == "CAUTION": return 'background-color: #F59E0B; color: white;'
         elif val == "NO-GO": return 'background-color: #EF4444; color: white;'
         return ''
     
-    # Note: st.dataframe with Styler uses `.map` in newer pandas, `.applymap` in older.
-    # We use a try/except to support both seamlessly.
     try:
         styled_df = compare_df.style.map(color_status, subset=['Status'])
     except AttributeError:
         styled_df = compare_df.style.applymap(color_status, subset=['Status'])
 
-    st.dataframe(
-        styled_df,
-        use_container_width=True,
-        hide_index=True
-    )
+    st.dataframe(styled_df, use_container_width=True, hide_index=True)
     st.divider()
 
 
@@ -147,7 +162,7 @@ with col_status:
             <p class="status-title">{verdict.status}</p>
             <p class="status-label">{verdict.label}</p>
             <p class="status-label" style="font-size:13px; opacity:0.85;">
-                {selected_site['name']} · {hours[idx]} UTC
+                {selected_site['name']}<br>{selected_date} · {hours[idx]} UTC
             </p>
         </div>
         """,
@@ -181,7 +196,7 @@ with col_metrics:
         st.markdown(f"- {r}")
 
 
-st.markdown("### 🕒 Mission timeline — status per hour")
+st.markdown(f"### 🕒 Mission timeline ({selected_date})")
 st.plotly_chart(
     timeline_status_chart(series, idx),
     use_container_width=True,
@@ -226,7 +241,7 @@ with notes_col:
     st.write(selected_site["description"])
     st.info(f"**Risk profile:** {selected_site['risk_notes']}")
 
-    st.markdown("**Window summary (24h)**")
+    st.markdown(f"**Window summary ({selected_date})**")
     s1, s2, s3 = st.columns(3)
     s1.metric("GO hours", f"{summary['go_hours']}/{summary['total_hours']}")
     s2.metric("Power OK", f"{summary['power_pct']}%")
@@ -236,6 +251,6 @@ with notes_col:
 st.divider()
 st.caption(
     "Prototype for NASA Space Apps Challenge · Lunar Landing Site Navigator. "
-    "Data is pre-calculated and modeled after public LOLA illumination studies - "
+    "Data spans 30 days and is modeled after public LOLA illumination studies - "
     "not for operational use."
 )

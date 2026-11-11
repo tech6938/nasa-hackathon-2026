@@ -29,7 +29,7 @@ def load_dataframe(path: str | Path = DATA_PATH) -> tuple[pd.DataFrame, list[dic
                 "elevation_m": site["elevation_m"],
                 "description": site["description"],
                 "risk_notes": site["risk_notes"],
-                "timestamp": datetime.fromisoformat(ts["timestamp"].replace("Z", "+00:00")),
+                "timestamp": pd.to_datetime(ts["timestamp"]).tz_localize(None),
                 "sun_elevation_deg": ts["sun_elevation_deg"],
                 "earth_visible": bool(ts["earth_visible"]),
                 "power_ok": bool(ts["power_ok"]),

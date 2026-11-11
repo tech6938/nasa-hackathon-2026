@@ -1,0 +1,34 @@
+html, body, [class*="css"] {
+    font-family: "Inter", "Segoe UI", sans-serif;
+}
+
+.status-card {
+    padding: 28px 20px;
+    border-radius: 16px;
+    text-align: center;
+    color: white;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    margin-bottom: 8px;
+}
+.status-card .status-title {
+    font-size: 42px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    margin: 0;
+}
+.status-card .status-label {
+    font-size: 16px;
+    opacity: 0.9;
+    margin: 6px 0 0 0;
+}
+
+.chip {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-right: 6px;
+}
+
+hr { margin: 1rem 0; }

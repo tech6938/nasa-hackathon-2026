@@ -6,6 +6,7 @@ Run with:  streamlit run app.py
 """
 from pathlib import Path
 import streamlit as st
+import pandas as pd
 
 st.set_page_config(
     page_title="Lunar Landing Site Navigator",
@@ -70,6 +71,7 @@ with st.sidebar:
     )
 
     st.divider()
+    compare_mode = st.checkbox("🔍 Compare all sites (at this hour)")
     st.caption(
         "Dataset: pre-calculated illumination & DTE visibility "
         "(modeled after LOLA/Mazarico et al.). 24h @ 1h resolution."
@@ -85,6 +87,52 @@ with st.sidebar:
         )
 
 
+# --- COMPARE MODE SECTION ---
+if compare_mode:
+    st.markdown("### ⚖️ Site Comparison (Current Hour)")
+    st.markdown(f"Comparing all candidate sites at **{hours[idx]} UTC**.")
+    
+    # Grab data for ALL sites at the current time
+    compare_rows = []
+    for site in sites_meta:
+        site_series = get_site_series(df, site["id"])
+        row = site_series.iloc[idx]
+        verdict = evaluate_point(row)
+        
+        compare_rows.append({
+            "Site": site["name"],
+            "Sun Elev (deg)": f"{row['sun_elevation_deg']:+.1f}°",
+            "Earth Visible": "✅ Yes" if row["earth_visible"] else "❌ No",
+            "Power OK": "✅ Yes" if row["power_ok"] else "❌ No",
+            "Status": verdict.status,
+            "Readiness": f"{verdict.score}/100"
+        })
+    
+    compare_df = pd.DataFrame(compare_rows)
+    
+    # Use Streamlit's built-in styling to color the Status column
+    def color_status(val):
+        if val == "GO": return 'background-color: #22C55E; color: white;'
+        elif val == "CAUTION": return 'background-color: #F59E0B; color: white;'
+        elif val == "NO-GO": return 'background-color: #EF4444; color: white;'
+        return ''
+    
+    # Note: st.dataframe with Styler uses `.map` in newer pandas, `.applymap` in older.
+    # We use a try/except to support both seamlessly.
+    try:
+        styled_df = compare_df.style.map(color_status, subset=['Status'])
+    except AttributeError:
+        styled_df = compare_df.style.applymap(color_status, subset=['Status'])
+
+    st.dataframe(
+        styled_df,
+        use_container_width=True,
+        hide_index=True
+    )
+    st.divider()
+
+
+# --- MAIN SINGLE SITE VIEW ---
 row = series.iloc[idx]
 verdict = evaluate_point(row)
 summary = summary_for_site(series)

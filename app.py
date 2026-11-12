@@ -24,6 +24,7 @@ from src.charts import (
     timeline_status_chart,
     site_map_chart,
     horizon_sky_chart,
+    lunar_3d_map,  # <-- Imported the new 3D map
 )
 
 css_path = Path(__file__).parent / "assets" / "style.css"
@@ -237,8 +238,10 @@ st.markdown("### 🗺️ Candidate sites & mission notes")
 map_col, notes_col = st.columns([1, 1], gap="large")
 
 with map_col:
+    # CHANGED: Now uses the 3D map instead of the flat 2D map
+    st.markdown("**🌕 3D South Pole Topography**")
     st.plotly_chart(
-        site_map_chart(sites_meta, selected_site["id"]),
+        lunar_3d_map(sites_meta, selected_site["id"], row["sun_elevation_deg"]),
         use_container_width=True,
         config={"displayModeBar": False},
     )

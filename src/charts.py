@@ -1,6 +1,9 @@
 """All Plotly figure builders."""
 import plotly.graph_objects as go
 import pandas as pd
+import numpy as np
+import json
+import os
 
 
 def sun_elevation_chart(series: pd.DataFrame, current_idx: int) -> go.Figure:
@@ -125,10 +128,6 @@ def horizon_sky_chart(row: pd.Series) -> go.Figure:
     """A literal sky-dome visualization of the Sun relative to the horizon."""
     sun_deg = float(row["sun_elevation_deg"])
     
-    # Plotly polar charts start at 90 (East) and go counter-clockwise.
-    # We map sun_deg to r (radius) and use a fixed theta.
-    # To visualize horizon, we plot a full circle at r=0.
-    
     fig = go.Figure()
 
     # 1. The Sky Dome Background (Green above horizon, Red below)
@@ -154,8 +153,8 @@ def horizon_sky_chart(row: pd.Series) -> go.Figure:
 
     # 3. The Sun
     fig.add_trace(go.Scatterpolar(
-        r=[max(sun_deg, -4.5)],  # Clamp so it doesn't fly off the chart
-        theta=[180], # Put it at the bottom (South)
+        r=[max(sun_deg, -4.5)], 
+        theta=[180], 
         mode='markers+text',
         marker=dict(size=18, color='#FBBF24', line=dict(color='white', width=2)),
         text=["☀️ Sun"],
@@ -184,5 +183,96 @@ def horizon_sky_chart(row: pd.Series) -> go.Figure:
         showlegend=False,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
+    )
+    return fig
+
+
+# --- 3D LUNAR MAP (Now supports NASA Data) ---
+def lunar_3d_map(sites_meta: list[dict], selected_id: str, sun_deg: float) -> go.Figure:
+    """A 3D surface plot of the lunar south pole with site markers and sun position."""
+    fig = go.Figure()
+
+    # Check if real NASA LOLA data exists
+    if os.path.exists("data/lola_terrain.json"):
+        try:
+            with open("data/lola_terrain.json", "r") as f:
+                terrain = json.load(f)
+            X = np.array(terrain["lons"])
+            Y = np.array(terrain["lats"])
+            Z = np.array(terrain["elevation"])
+            print("✅ Using Real NASA LOLA Terrain Data")
+        except Exception as e:
+            print(f"Error loading NASA data: {e}. Falling back to mock terrain.")
+            os.remove("data/lola_terrain.json") # Delete corrupt file
+            return lunar_3d_map(sites_meta, selected_id, sun_deg)
+    else:
+        # Fallback to mock terrain
+        x = np.linspace(-90, -80, 50)
+        y = np.linspace(-180, 180, 50)
+        X, Y = np.meshgrid(x, y)
+        Z = np.sin(X * 1.5) * np.cos(Y * 0.5) * 3000 + 1000
+        print("⚠️ Using Mock Terrain (NASA data not found)")
+
+    # 3D Terrain
+    fig.add_trace(go.Surface(
+        x=X, y=Y, z=Z,
+        colorscale='Greys',
+        showscale=False,
+        opacity=0.8,
+        hoverinfo='skip',
+        name='Lunar Terrain'
+    ))
+
+    site_lats = [s["lat"] for s in sites_meta]
+    site_lons = [s["lon"] for s in sites_meta]
+    site_names = [s["name"] for s in sites_meta]
+    
+    # Estimate site Z based on the terrain function
+    if not os.path.exists("data/lola_terrain.json"):
+        site_z = np.sin(np.array(site_lats) * 1.5) * np.cos(np.array(site_lons) * 0.5) * 3000 + 1000
+    else:
+        # If using real data, just place markers slightly above the highest peak
+        site_z = np.full(len(site_lats), np.max(Z) + 100)
+
+    colors = ["#38BDF8" if s["id"] == selected_id else "#94A3B8" for s in sites_meta]
+    sizes = [10 if s["id"] == selected_id else 5 for s in sites_meta]
+
+    # Site Markers
+    fig.add_trace(go.Scatter3d(
+        x=site_lats, y=site_lons, z=site_z,
+        mode='markers+text',
+        marker=dict(size=sizes, color=colors, line=dict(color='white', width=1)),
+        text=site_names,
+        textposition="top center",
+        textfont=dict(size=10, color="white"),
+        name='Landing Sites',
+        hovertemplate="<b>%{text}</b><br>Lat: %{x:.2f}<br>Lon: %{y:.2f}<extra></extra>"
+    ))
+
+    # Sun Marker
+    fig.add_trace(go.Scatter3d(
+        x=[-85], y=[0], z=[np.max(Z) + 5000],
+        mode='markers+text',
+        marker=dict(size=15, color='#FBBF24', symbol='circle'),
+        text=[f"☀️ Sun ({sun_deg:+.1f}°)"],
+        textposition="bottom center",
+        textfont=dict(size=12, color="#FBBF24"),
+        name='Sun',
+        hoverinfo='skip'
+    ))
+
+    fig.update_layout(
+        height=450,
+        margin=dict(l=0, r=0, t=0, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        scene=dict(
+            xaxis=dict(title="Longitude", showgrid=False, showticklabels=False, backgroundcolor="rgba(0,0,0,0)"),
+            yaxis=dict(title="Latitude", showgrid=False, showticklabels=False, backgroundcolor="rgba(0,0,0,0)"),
+            zaxis=dict(title="Elevation (m)", showgrid=False, showticklabels=False, backgroundcolor="rgba(0,0,0,0)"),
+            camera=dict(
+                eye=dict(x=1.5, y=1.5, z=1.2)
+            )
+        ),
+        showlegend=False
     )
     return fig
